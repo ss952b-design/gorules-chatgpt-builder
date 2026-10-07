@@ -41,7 +41,7 @@ async function getDevice(){
 }
 
 async function loadModel(){
-  var model=$("model").value.trim()||"onnx-community/Qwen2.5-Coder-1.5B-Instruct";
+  var model=$("model").value.trim()||"onnx-community/Qwen2.5-Coder-3B-Instruct";
   if(generator&&activeModel===model)return;
   var device=await getDevice();
   status("Loading local AI model… first load downloads the model.");
