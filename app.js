@@ -22,7 +22,7 @@ var SYSTEM=[
 "ZEN expressions must not contain JavaScript-only syntax: spread, optional chaining, nullish coalescing, arrow functions, JS Array method chains, or arbitrary JavaScript.",
 "Prefer conservative GoRules ZEN functions when supported: map, filter, flatten, sum, avg, min, max, len, number, string, round, floor, ceil and supported date functions.",
 "Keep IDs unique, every edge source and target must reference existing node IDs, and expressions must avoid undefined variables.",
-"Keep JSON compact and validationNotes concise."
+"For scorecards/BREs: when a parameter has a present extracted value, its score must be numeric, its decision must be PASS/REFER/REJECT, and its score must come from an explicit decisionTableNode rule. N/A is allowed only when the underlying value is missing, null, blank, or genuinely unavailable. A score of 0 is valid but must never be paired with decision N/A. Include parameter-level score, maxScore, decision, plus aggregate totalScore, totalMaxScore, scorePercent, counts for PASS/REFER/REJECT/N/A, finalDecision and riskCategory when the requirement asks for scoring. Use FIRST_MATCH decision tables and add a final catch-all row where appropriate. For vehicle credit scorecards, do not silently drop scoring outputs after extracting values; wire decision-table outputs through the graph to the final result."
 ].join("\n");
 
 function add(role,text){
@@ -85,7 +85,7 @@ function outputText(result){
 async function ask(prompt){
   await loadModel();
   status("Generating locally on your device…");
-  var result=await generator(messagesFor(prompt),{max_new_tokens:2200,do_sample:false,temperature:0.1,repetition_penalty:1.05});
+  var result=await generator(messagesFor(prompt),{max_new_tokens:3000,do_sample:false,temperature:0.1,repetition_penalty:1.05});
   var out=outputText(result);
   if(!out)throw new Error("Local model returned an empty response.");
   chatHistory.push({role:"user",content:prompt},{role:"assistant",content:out});
