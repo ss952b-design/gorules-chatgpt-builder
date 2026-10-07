@@ -16,9 +16,9 @@ function $(id){return document.getElementById(id);}
 var SYSTEM=[
 "You are a GoRules BRMS architect. Build production-oriented GoRules decision graph JSON from the user's requirement.",
 "Return exactly one JSON object with nodes, edges, validationNotes. No markdown.",
-"Allowed node types: inputNode, expressionNode, decisionTableNode, functionNode.",
+"Allowed node types: inputNode, expressionNode, decisionTableNode, functionNode, outputNode.",
 "Use functionNode ONLY for external API/network calls; never business logic.",
-"Use expressionNode for calculations/transformations and decisionTableNode for thresholds, categories and pass/refer/reject rules.",
+"Use expressionNode for calculations/transformations and decisionTableNode for thresholds, categories and pass/refer/reject rules when Full GoRules tables mode is selected. In Editor-safe mode, use expressionNode scoring so the graph avoids decisionTableNode entirely.",
 "ZEN expressions must not contain JavaScript-only syntax: spread, optional chaining, nullish coalescing, arrow functions, JS Array method chains, or arbitrary JavaScript.",
 "Prefer conservative GoRules ZEN functions when supported: map, filter, flatten, sum, avg, min, max, len, number, string, round, floor, ceil and supported date functions.",
 "Keep IDs unique, every edge source and target must reference existing node IDs, and expressions must avoid undefined variables.",
@@ -113,9 +113,11 @@ function validateGraph(g){
     ids[n.id]=true;
   });
   g.edges.forEach(function(e){
-    if(!e||!e.source||!e.target)throw new Error("Each edge needs source and target.");
-    if(!ids[e.source])throw new Error("Edge source not found: "+e.source);
-    if(!ids[e.target])throw new Error("Edge target not found: "+e.target);
+    if(!e)throw new Error("Invalid edge.");
+    var s=e.sourceId||e.source, t=e.targetId||e.target;
+    if(!s||!t)throw new Error("Each edge needs sourceId and targetId.");
+    if(!ids[s])throw new Error("Edge source not found: "+s);
+    if(!ids[t])throw new Error("Edge target not found: "+t);
   });
   if(!Array.isArray(g.validationNotes))g.validationNotes=[];
   g.validationNotes.push("Client-side JSON and node/edge reference validation passed.");
@@ -149,12 +151,13 @@ function parseGraph(text){
   catch(e){throw new Error(e.message==="Unexpected end of JSON input"?"Incomplete JSON returned by the local model. Try a shorter prompt.":e.message);}
 }
 
-async function run(prompt){
+function buildPrompt(prompt){var mode=$("graphMode")?$("graphMode").value:"safe";var json=$("inputJson")?$("inputJson").value.trim():"";var modeInstruction=mode==="safe"?"GRAPH MODE: Editor-safe. Do NOT create decisionTableNode. Use only inputNode, functionNode, expressionNode and outputNode.":"GRAPH MODE: Full GoRules tables. decisionTableNode is allowed and should be used for explicit rule matrices.";return prompt+"\n\n"+modeInstruction+(json?"\n\nSOURCE INPUT JSON:\n"+json:"");}\n\nasync function run(prompt){
   if(generating)return;
+  var effectivePrompt=buildPrompt(prompt);
   add("user",prompt);
   generating=true;$("generate").disabled=true;$("send").disabled=true;
   try{
-    var raw=await ask(prompt);
+    var raw=await ask(effectivePrompt);
     add("bot",raw.slice(0,5000));
     lastGraph=parseGraph(raw);
     if(scorecardNeedsRepair(lastGraph,prompt)){
@@ -162,7 +165,7 @@ async function run(prompt){
       add("bot","The first graph left scored values as N/A. Running an automatic scoring-output repair…");
       lastGraph=await repairScorecard(lastGraph,prompt);
     }
-    $("graph").textContent=JSON.stringify(lastGraph,null,2);
+    $("graph").textContent=JSON.stringify(lastGraph,null,2);if($("integrity"))$("integrity").textContent="PASS • "+lastGraph.nodes.length+" nodes / "+lastGraph.edges.length+" edges";
     $("notes").textContent=JSON.stringify(lastGraph.validationNotes||[],null,2);
     status("Graph generated successfully on your device.");
   }catch(e){
@@ -194,7 +197,7 @@ $("sample1").onclick=function(){
   $("prompt").value="Create a collection date prediction graph using 6 months of Account Aggregator transactions. Use a configurable collectionThreshold, currently 15000. Identify up to 3 strong recurring collection dates. Keep business logic in ZEN Expression and Decision Table nodes. Use JavaScript only for external API fetching.";
 };
 $("sample2").onclick=function(){
-  $("prompt").value="Create an NBFC BRE graph for applicant age, business vintage, loan amount, bureau score, FOIR and eligibility. Keep business logic in GoRules Expression and Decision Table nodes. Use JavaScript only for external API calls.";
+  $("prompt").value="Create a 45-parameter vehicle loan credit scorecard. Extract applicant, co-applicant, credit/bureau, financial and vehicle attributes. For every parameter with an available value, assign numeric score, maxScore, PASS/REFER/REJECT decision and an explicit reason. A score of 0 must state exactly why it is 0. N/A is only for genuinely missing values. Calculate totalScore, totalMaxScore, scorePercent, PASS/REFER/REJECT/N/A counts, finalDecision and riskCategory.";
 };
 
 $("tabGraph").onclick=function(){
@@ -216,6 +219,7 @@ $("model").addEventListener("change",function(){
   generator=null;activeModel=null;status("Model changed. It will load on the next generation.");
 });
 
+if($("jsonFile"))$("jsonFile").addEventListener("change",function(e){var file=e.target.files&&e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(){$("inputJson").value=String(reader.result||"").trim();if($("jsonMeta"))$("jsonMeta").textContent=file.name+" • "+Math.round(file.size/1024)+" KB";status("Input JSON loaded.");};reader.readAsText(file);});if($("dropzone")){$("dropzone").addEventListener("dragover",function(e){e.preventDefault();$("dropzone").classList.add("drag");});$("dropzone").addEventListener("dragleave",function(){$("dropzone").classList.remove("drag");});$("dropzone").addEventListener("drop",function(e){e.preventDefault();$("dropzone").classList.remove("drag");var f=e.dataTransfer.files&&e.dataTransfer.files[0];if(!f)return;var r=new FileReader();r.onload=function(){$("inputJson").value=String(r.result||"").trim();if($("jsonMeta"))$("jsonMeta").textContent=f.name+" • "+Math.round(f.size/1024)+" KB";status("Input JSON loaded.");};r.readAsText(f);});}if($("clearJson"))$("clearJson").onclick=function(){$("inputJson").value="";$("jsonFile").value="";$("jsonMeta").textContent="No input loaded";status("Input JSON cleared.");};
 getDevice().then(function(){
   add("bot","Ready. No API key and no cloud AI credits are required. Inference runs locally in your browser.");
 });
